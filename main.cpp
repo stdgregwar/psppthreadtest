@@ -1,4 +1,3 @@
-#include <pthread.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <pspkernel.h>
@@ -13,83 +12,11 @@
 #include <pspgu.h>
 #include <psprtc.h>
 #include <cassert>
+#include <physfs.h>
 
-PSP_MODULE_INFO("Pthreads Sample", 0, 1, 1);
+PSP_MODULE_INFO("PhysFS sample", 0, 1, 1);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
 
-typedef struct
-{
-    pthread_mutex_t mutex;
-    pthread_t owner;
-    uint32_t count;
-} PthreadMutex;
-
-
-void *__PHYSFS_platformGetThreadID(void)
-{
-    return ( (void *) ((size_t) pthread_self()) );
-} /* __PHYSFS_platformGetThreadID */
-
-
-void *__PHYSFS_platformCreateMutex(void)
-{
-    int rc;
-    PthreadMutex *m = (PthreadMutex *) malloc(sizeof (PthreadMutex));
-    rc = pthread_mutex_init(&m->mutex, NULL);
-    if (rc != 0)
-    {
-        free(m);
-        return NULL;
-    } /* if */
-
-    m->count = 0;
-    m->owner = (pthread_t) 0xDEADBEEF;
-    return ((void *) m);
-} /* __PHYSFS_platformCreateMutex */
-
-
-void __PHYSFS_platformDestroyMutex(void *mutex)
-{
-    PthreadMutex *m = (PthreadMutex *) mutex;
-
-    /* Destroying a locked mutex is a bug, but we'll try to be helpful. */
-    if ((m->owner == pthread_self()) && (m->count > 0))
-        pthread_mutex_unlock(&m->mutex);
-
-    pthread_mutex_destroy(&m->mutex);
-    free(m);
-} /* __PHYSFS_platformDestroyMutex */
-
-
-int __PHYSFS_platformGrabMutex(void *mutex)
-{
-    PthreadMutex *m = (PthreadMutex *) mutex;
-    pthread_t tid = pthread_self();
-    if (m->owner != tid)
-    {
-        if (pthread_mutex_lock(&m->mutex) != 0)
-            return 0;
-        m->owner = tid;
-    } /* if */
-
-    m->count++;
-    return 1;
-} /* __PHYSFS_platformGrabMutex */
-
-void __PHYSFS_platformReleaseMutex(void *mutex)
-{
-    PthreadMutex *m = (PthreadMutex *) mutex;
-    assert(m->owner == pthread_self());  /* catch programming errors. */
-    assert(m->count > 0);  /* catch programming errors. */
-    if (m->owner == pthread_self())
-        {
-            if (--m->count == 0)
-                {
-                    m->owner = (pthread_t) 0xDEADBEEF;
-                    pthread_mutex_unlock(&m->mutex);
-                } /* if */
-        } /* if */
-} /* __PHYSFS_platformReleaseMutex */
 
 static int exitRequest = 0;
 
@@ -133,25 +60,21 @@ int main(void)
 {
     setupCallbacks();
     pspDebugScreenInit();
-    void* mutex = __PHYSFS_platformCreateMutex();
+
+
+    PHYSFS_init(nullptr);
+    PHYSFS_addToSearchPath(".",1);
 
     int i = 0;
     while(running())
     {
         pspDebugScreenSetXY(0,0);
         pspDebugScreenPrintf("loop: %d\n",(int)i);
-        pspDebugScreenPrintf("Self: %p", __PHYSFS_platformGetThreadID());
-        // __PHYSFS_platformGrabMutex(mutex);
-        // __PHYSFS_platformGrabMutex(mutex);
 
-        
-        // __PHYSFS_platformReleaseMutex(mutex);
-        // __PHYSFS_platformReleaseMutex(mutex);
 
         sceDisplayWaitVblankStart();
         i++;
     }
 
-    __PHYSFS_platformDestroyMutex(mutex);
     sceKernelExitGame();
 }
